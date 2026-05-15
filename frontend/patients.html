@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Patients - SmartCare</title>
+  <link rel="stylesheet" href="/frontend/assets/css/styles.css">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>SmartCare</h2>
+    <a href="/frontend/index.html">Dashboard</a>
+    <a href="/frontend/patients.html">Patients</a>
+    <a href="/frontend/doctors.html">Doctors</a>
+  </div>
+  <div class="main">
+    <div class="topnav"><h3>Patients</h3><div><button class="btn" id="newPatientBtn">New Patient</button></div></div>
+    <div id="patientsTable" class="card"></div>
+  </div>
+
+  <script src="/frontend/assets/js/app.js"></script>
+  <script>
+    async function loadPatients(){
+      try{
+        const data = await apiFetch('/patients');
+        renderTable('#patientsTable', data, [
+          {label:'ID', key:'patient_id'},{label:'Name', key:'full_name'},{label:'Phone', key:'phone'},{label:'Email', key:'email'},{label:'Actions', key:'patient_id'}
+        ]);
+      }catch(err){console.error(err);}
+    }
+    loadPatients();
+  </script>
+</body>
+</html>

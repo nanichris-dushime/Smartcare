@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SmartCare Dashboard</title>
+  <link rel="stylesheet" href="/frontend/assets/css/styles.css">
+</head>
+<body>
+  <div class="sidebar">
+    <h2>SmartCare</h2>
+    <a href="/frontend/index.html">Dashboard</a>
+    <a href="/frontend/patients.html">Patients</a>
+    <a href="/frontend/doctors.html">Doctors</a>
+    <a href="/frontend/medicines.html">Medicines</a>
+    <a href="/frontend/appointments.html">Appointments</a>
+    <a href="#" id="logoutLink">Logout</a>
+  </div>
+  <div class="main">
+    <div class="topnav">
+      <h3>Dashboard</h3>
+      <div>
+        <button class="btn" id="refreshBtn">Refresh</button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="stat card"><h4>Total Patients</h4><div id="totalPatients">...</div></div>
+      <div class="stat card"><h4>Total Doctors</h4><div id="totalDoctors">...</div></div>
+      <div class="stat card"><h4>Appointments</h4><div id="totalAppointments">...</div></div>
+      <div class="stat card"><h4>Total Revenue</h4><div id="totalRevenue">...</div></div>
+    </div>
+
+    <div style="margin-top:20px" id="recentAppointments" class="card"></div>
+  </div>
+
+  <script src="/frontend/assets/js/app.js"></script>
+  <script>
+    document.getElementById('logoutLink').addEventListener('click', ()=>{ localStorage.removeItem('sc_token'); window.location='/frontend/login.html'; });
+    async function loadStats(){
+      try{
+        // placeholder: call multiple endpoints
+        const patients = await apiFetch('/patients');
+        const doctors = await apiFetch('/doctors');
+        document.getElementById('totalPatients').innerText = patients.length;
+        document.getElementById('totalDoctors').innerText = doctors.length;
+        document.getElementById('totalAppointments').innerText = '—';
+        document.getElementById('totalRevenue').innerText = '—';
+        renderTable('#recentAppointments', [], [{label:'Message', key:'message'}]);
+      }catch(err){ console.error(err); if (err.message) alert(err.message); }
+    }
+    document.getElementById('refreshBtn').addEventListener('click', loadStats);
+    loadStats();
+  </script>
+</body>
+</html>
