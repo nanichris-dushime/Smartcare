@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Appointments - SmartCare</title>
+  <link rel="stylesheet" href="/frontend/assets/css/styles.css">
+
+</head>
+<body>
+  <div class="sidebar">
+    <h2>SmartCare</h2>
+    <a href="/frontend/index.html">Dashboard</a>
+    <a href="/frontend/patients.html">Patients</a>
+    <a href="/frontend/doctors.html">Doctors</a>
+    <a href="/frontend/appointments.html">Appointments</a>
+  </div>
+  <div class="main">
+    <div class="topnav"><h3>Appointments</h3><div><button class="btn" id="newApptBtn">New Appointment</button></div></div>
+    <div id="appointmentsTable" class="card"></div>
+  </div>
+
+  <script src="/frontend/assets/js/app.js"></script>
+  <script>
+    async function loadAppointments(){
+      try{
+        const data = await apiFetch('/appointments');
+        renderTable('#appointmentsTable', data, [
+          {label:'ID', key:'appointment_id'},{label:'Patient ID', key:'patient_id'},{label:'Doctor ID', key:'doctor_id'},{label:'Date', key:'appointment_date'},{label:'Status', key:'status'}
+        ]);
+      }catch(err){console.error(err);}    
+    }
+    loadAppointments();
+  </script>
+</body>
+</html>
