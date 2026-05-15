@@ -10,10 +10,18 @@ const register = async (req, res) => {
     const { username, email, password, role_name } = req.body;
     if (!username || !email || !password) return res.status(400).json({message: 'Missing fields'});
 
-    // find role_id by name
-    const [roleRows] = await db.query('SELECT * FROM roles WHERE role_name = ?', [role_name || 'Receptionist']);
-    const role = roleRows[0];
-    const role_id = role ? role.role_id : 2;
+    // find role_id by name (create the role if it doesn't exist)
+    const desiredRole = role_name || 'Receptionist';
+    let [roleRows] = await db.query('SELECT * FROM roles WHERE role_name = ?', [desiredRole]);
+    let role = roleRows[0];
+    let role_id;
+    if (!role) {
+      // create the role and use its id
+      const [insertRes] = await db.query('INSERT INTO roles (role_name) VALUES (?)', [desiredRole]);
+      role_id = insertRes.insertId;
+    } else {
+      role_id = role.role_id;
+    }
 
     const existing = await User.findByEmail(email);
     if (existing) return res.status(400).json({message: 'Email already registered'});
