@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     FOREIGN KEY (doctor_id)
     REFERENCES doctors(doctor_id)
 );
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor_date ON appointments (doctor_id, appointment_date);
+
 
 -- Admissions Table
 CREATE TABLE IF NOT EXISTS admissions (

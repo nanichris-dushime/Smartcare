@@ -20,17 +20,50 @@
     <div id="appointmentsTable" class="card"></div>
   </div>
 
+  <!-- Create Appointment Modal -->
+  <div id="apptModal" class="card" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:90%;max-width:600px;z-index:50">
+    <h3>Create Appointment</h3>
+    <form id="apptForm">
+      <div class="row"><input id="patient_id" type="number" placeholder="Patient ID" required></div>
+      <div class="row" style="margin-top:8px"><input id="doctor_id" type="number" placeholder="Doctor ID" required></div>
+      <div class="row" style="margin-top:8px"><input id="appointment_date" type="datetime-local" required></div>
+      <div style="margin-top:12px"><button class="btn" type="submit">Create</button>
+      <button type="button" class="btn secondary" id="cancelAppt">Cancel</button></div>
+    </form>
+  </div>
+
   <script src="/frontend/assets/js/app.js"></script>
   <script>
     async function loadAppointments(){
       try{
-        const data = await apiFetch('/appointments');
+        const res = await apiFetch('/appointments');
+        const data = res.data.rows || res.data || res;
         renderTable('#appointmentsTable', data, [
-          {label:'ID', key:'appointment_id'},{label:'Patient ID', key:'patient_id'},{label:'Doctor ID', key:'doctor_id'},{label:'Date', key:'appointment_date'},{label:'Status', key:'status'}
+          {label:'ID', key:'appointment_id'},{label:'Patient', key:'patient_name'},{label:'Doctor', key:'doctor_name'},{label:'Date', key:'appointment_date'},{label:'Status', key:'status'}
         ]);
       }catch(err){console.error(err);}    
     }
     loadAppointments();
+
+    // modal logic
+    const modal = document.getElementById('apptModal');
+    document.getElementById('newApptBtn').addEventListener('click', ()=> modal.style.display='block');
+    document.getElementById('cancelAppt').addEventListener('click', ()=> modal.style.display='none');
+
+    document.getElementById('apptForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const payload = {
+        patient_id: Number(document.getElementById('patient_id').value),
+        doctor_id: Number(document.getElementById('doctor_id').value),
+        appointment_date: document.getElementById('appointment_date').value
+      };
+      try{
+        const res = await apiFetch('/appointments', { method: 'POST', body: JSON.stringify(payload) });
+        alert(res.message || 'Created');
+        modal.style.display='none';
+        loadAppointments();
+      }catch(err){ alert(err.message || 'Error'); }
+    });
   </script>
 </body>
 </html>

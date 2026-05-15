@@ -35,6 +35,7 @@ app.use('/api/doctors', require('./routes/doctors'));
 app.use('/api/departments', require('./routes/departments'));
 app.use('/api/medicines', require('./routes/medicines'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/appointments', require('./routes/appointments'));
 
 // Default root
 app.get('/', (req, res) => res.json({ message: 'SmartCare Hospital API' }));
