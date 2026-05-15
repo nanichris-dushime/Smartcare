@@ -19,9 +19,17 @@ const getDashboard = async (req, res) => {
       result.monthlyStats = await db.query("SELECT DATE_FORMAT(appointment_date, '%Y-%m') AS month, COUNT(*) AS count FROM appointments GROUP BY month ORDER BY month DESC LIMIT 6");
     } else if (role === 'Doctor'){
       // doctor sees their own appointments and patients
-      const doctor_id = req.user.user_id; // Note: user_id vs doctor_id mapping is app-specific; assume user_id matches doctor.user_id if linked
-      const [myAppointments] = await db.query('SELECT a.* FROM appointments a WHERE a.doctor_id = ? ORDER BY a.appointment_date DESC LIMIT 6', [doctor_id]);
-      result.myAppointments = myAppointments;
+      let doctor_id = req.user.doctor_id || null;
+      if (!doctor_id){
+        const [docRows] = await db.query('SELECT doctor_id FROM doctors WHERE user_id = ? LIMIT 1', [req.user.user_id]);
+        doctor_id = docRows && docRows[0] ? docRows[0].doctor_id : null;
+      }
+      if (doctor_id){
+        const [myAppointments] = await db.query('SELECT a.* FROM appointments a WHERE a.doctor_id = ? ORDER BY a.appointment_date DESC LIMIT 6', [doctor_id]);
+        result.myAppointments = myAppointments;
+      } else {
+        result.myAppointments = [];
+      }
     } else if (role === 'Receptionist'){
       // receptionist sees appointments and admissions
       const [upcoming] = await db.query('SELECT a.*, p.full_name FROM appointments a LEFT JOIN patients p ON a.patient_id = p.patient_id WHERE a.appointment_date >= NOW() ORDER BY a.appointment_date ASC LIMIT 6');

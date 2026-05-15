@@ -30,6 +30,15 @@ const register = async (req, res) => {
     const hashed = await bcrypt.hash(password, salt);
     const user = await User.create({username, email, password: hashed, role_id});
 
+    // If the user is a doctor, create a doctor record linked to this user (basic profile - can be updated later)
+    if (desiredRole === 'Doctor'){
+      try{
+        const [deptRows] = await db.query('SELECT department_id FROM departments LIMIT 1');
+        const department_id = deptRows[0] ? deptRows[0].department_id : null;
+        await db.query('INSERT INTO doctors (full_name, specialization, email, phone, department_id, user_id) VALUES (?, ?, ?, ?, ?, ?)', [username, '', email, '', department_id, user.user_id]);
+      }catch(e){ console.warn('Could not create doctor profile:', e.message); }
+    }
+
     res.json({message: 'User registered', user});
   } catch (err) {
     console.error(err);
@@ -51,6 +60,12 @@ const login = async (req, res) => {
     const role_name = roleRows[0] ? roleRows[0].role_name : 'User';
 
     const payload = { user_id: user.user_id, email: user.email, role_id: user.role_id, role_name };
+    // if doctor, fetch doctor_id
+    if (role_name === 'Doctor'){
+      const [docRows] = await db.query('SELECT doctor_id FROM doctors WHERE user_id = ? LIMIT 1', [user.user_id]);
+      if (docRows && docRows[0]) payload.doctor_id = docRows[0].doctor_id;
+    }
+
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1d' });
     res.json({message: 'Logged in', token, user: payload});
   } catch (err) {

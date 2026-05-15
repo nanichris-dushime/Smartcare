@@ -18,10 +18,14 @@ CREATE TABLE IF NOT EXISTS doctors (
     email VARCHAR(100) UNIQUE,
     phone VARCHAR(20),
     department_id INT,
+    user_id INT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (department_id)
     REFERENCES departments(department_id)
 );
+-- If users table exists, link doctors.user_id to users.user_id
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS user_id INT DEFAULT NULL;
+ALTER TABLE doctors ADD CONSTRAINT IF NOT EXISTS fk_doctors_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL;
 
 -- Patients Table
 CREATE TABLE IF NOT EXISTS patients (

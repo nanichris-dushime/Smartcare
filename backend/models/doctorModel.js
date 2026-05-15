@@ -2,10 +2,10 @@ const db = require('../config/db');
 
 const Doctor = {
   async create(data){
-    const {full_name, specialization, email, phone, department_id} = data;
+    const {full_name, specialization, email, phone, department_id, user_id = null} = data;
     const [result] = await db.query(
-      'INSERT INTO doctors (full_name, specialization, email, phone, department_id) VALUES (?, ?, ?, ?, ?)',
-      [full_name, specialization, email, phone, department_id]
+      'INSERT INTO doctors (full_name, specialization, email, phone, department_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+      [full_name, specialization, email, phone, department_id, user_id]
     );
     return {doctor_id: result.insertId, ...data};
   },
