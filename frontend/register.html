@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SmartCare - Register</title>
+  <link rel="stylesheet" href="/frontend/assets/css/styles.css">
+</head>
+<body>
+  <div class="container" style="max-width:640px;margin-top:40px">
+    <div class="card">
+      <h2 style="color:var(--blue)">Create Account</h2>
+      <form id="regForm">
+        <div class="row"><input type="text" id="username" placeholder="Username" required></div>
+        <div class="row" style="margin-top:8px"><input type="email" id="email" placeholder="Email" required></div>
+        <div class="row" style="margin-top:8px"><input type="password" id="password" placeholder="Password" required></div>
+        <div style="margin-top:12px"><select id="role"><option>Receptionist</option><option>Admin</option><option>Doctor</option><option>Pharmacist</option><option>Laboratory Technician</option></select></div>
+        <div style="margin-top:12px"><button class="btn" type="submit">Register</button>
+        <a href="/frontend/login.html" style="margin-left:8px">Login</a></div>
+      </form>
+    </div>
+  </div>
+  <script src="/frontend/assets/js/app.js"></script>
+  <script>
+    document.getElementById('regForm').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const role_name = document.getElementById('role').value;
+      try{
+        const res = await fetch('http://localhost:5000/api/auth/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,email,password,role_name})});
+        const data = await res.json();
+        if (!res.ok) return alert(data.message || 'Registration failed');
+        alert('Registered successfully. Please login.');
+        window.location = '/frontend/login.html';
+      }catch(err){alert(err.message)}
+    });
+  </script>
+</body>
+</html>
