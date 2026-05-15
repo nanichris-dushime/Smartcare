@@ -24,33 +24,58 @@
       </div>
     </div>
 
-    <div class="cards">
-      <div class="stat card"><h4>Total Patients</h4><div id="totalPatients">...</div></div>
-      <div class="stat card"><h4>Total Doctors</h4><div id="totalDoctors">...</div></div>
-      <div class="stat card"><h4>Appointments</h4><div id="totalAppointments">...</div></div>
-      <div class="stat card"><h4>Total Revenue</h4><div id="totalRevenue">...</div></div>
+    <div id="roleCards" class="cards">
+      <!-- role-specific cards will render here -->
     </div>
 
-    <div style="margin-top:20px" id="recentAppointments" class="card"></div>
+    <div style="margin-top:20px" id="roleSection" class="card"></div>
   </div>
 
   <script src="/frontend/assets/js/app.js"></script>
   <script>
     document.getElementById('logoutLink').addEventListener('click', ()=>{ localStorage.removeItem('sc_token'); window.location='/frontend/login.html'; });
-    async function loadStats(){
+    async function loadDashboard(){
       try{
-        // placeholder: call multiple endpoints
-        const patients = await apiFetch('/patients');
-        const doctors = await apiFetch('/doctors');
-        document.getElementById('totalPatients').innerText = patients.length;
-        document.getElementById('totalDoctors').innerText = doctors.length;
-        document.getElementById('totalAppointments').innerText = '—';
-        document.getElementById('totalRevenue').innerText = '—';
-        renderTable('#recentAppointments', [], [{label:'Message', key:'message'}]);
+        const data = await apiFetch('/reports/dashboard');
+        // clear cards
+        const cards = document.getElementById('roleCards');
+        cards.innerHTML = '';
+        // common summary
+        const summary = [
+          {label:'Total Patients', value: data.totalPatients},
+          {label:'Total Doctors', value: data.totalDoctors},
+          {label:'Appointments', value: data.totalAppointments},
+          {label:'Total Revenue', value: data.totalRevenue}
+        ];
+        summary.forEach(s => {
+          const el = document.createElement('div'); el.className='stat card'; el.innerHTML=`<h4>${s.label}</h4><div style="font-size:24px">${s.value ?? '0'}</div>`; cards.appendChild(el);
+        });
+
+        const section = document.getElementById('roleSection');
+        section.innerHTML = '';
+        // render role specific data
+        if (data.recentAppointments){
+          section.innerHTML = '<h4>Recent Appointments</h4>';
+          renderTable('#roleSection', data.recentAppointments, [{label:'Date', key:'appointment_date'},{label:'Patient', key:'patient_name'},{label:'Doctor', key:'doctor_name'},{label:'Status', key:'status'}]);
+        } else if (data.myAppointments){
+          section.innerHTML = '<h4>My Appointments</h4>';
+          renderTable('#roleSection', data.myAppointments, [{label:'Date', key:'appointment_date'},{label:'Patient', key:'patient_id'},{label:'Status', key:'status'}]);
+        } else if (data.upcomingAppointments){
+          section.innerHTML = '<h4>Upcoming Appointments</h4>';
+          renderTable('#roleSection', data.upcomingAppointments, [{label:'Date', key:'appointment_date'},{label:'Patient', key:'full_name'},{label:'Status', key:'status'}]);
+        } else if (data.lowStock){
+          section.innerHTML = '<h4>Low Stock Medicines</h4>';
+          renderTable('#roleSection', data.lowStock, [{label:'Name', key:'medicine_name'},{label:'Qty', key:'quantity'},{label:'Expiry', key:'expiry_date'}]);
+        } else if (data.pendingTests){
+          section.innerHTML = '<h4>Pending Tests</h4>';
+          renderTable('#roleSection', data.pendingTests, [{label:'Test', key:'test_name'},{label:'Patient', key:'patient_id'},{label:'Date', key:'test_date'}]);
+        } else {
+          section.innerHTML = '<p>No role-specific data available.</p>';
+        }
       }catch(err){ console.error(err); if (err.message) alert(err.message); }
     }
-    document.getElementById('refreshBtn').addEventListener('click', loadStats);
-    loadStats();
+    document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
+    loadDashboard();
   </script>
 </body>
 </html>
