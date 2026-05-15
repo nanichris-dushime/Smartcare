@@ -24,6 +24,11 @@ const reportsRoutes = require('./routes/reports');
 app.use(cors());
 app.use(express.json());
 
+// Serve frontend static files (so requests like /frontend/appointments.html work)
+const frontendPath = path.join(__dirname, '..', 'frontend');
+app.use('/frontend', express.static(frontendPath));
+console.log(`Serving frontend from ${frontendPath}`);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/doctors', doctorRoutes);
