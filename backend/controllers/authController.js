@@ -1,91 +1,174 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/userModel');
-const Role = require('../models/roleModel');
 const db = require('../config/db');
-require('dotenv').config();
+const { success, fail } = require('../utils/response');
+
+const generateTokens = (payload) => {
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '15m' });
+  const refreshToken = jwt.sign({ user_id: payload.user_id }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh', { expiresIn: '7d' });
+  return { token, refreshToken };
+};
 
 const register = async (req, res) => {
   try {
     const { username, email, password, role_name } = req.body;
-    if (!username || !email || !password) return res.status(400).json({message: 'Missing fields'});
+    if (!username || !email || !password) return fail(res, 'username, email, and password are required', null, 422);
+    if (password.length < 6) return fail(res, 'Password must be at least 6 characters', null, 422);
 
-    // find role_id by name (create the role if it doesn't exist)
+    const [existingRows] = await db.query('SELECT user_id FROM users WHERE email = ?', [email]);
+    if (existingRows[0]) return fail(res, 'Email already registered', null, 409);
+
     const desiredRole = role_name || 'Receptionist';
-    let [roleRows] = await db.query('SELECT * FROM roles WHERE role_name = ?', [desiredRole]);
-    let role = roleRows[0];
-    let role_id;
-    if (!role) {
-      // create the role and use its id
-      const [insertRes] = await db.query('INSERT INTO roles (role_name) VALUES (?)', [desiredRole]);
-      role_id = insertRes.insertId;
-    } else {
-      role_id = role.role_id;
-    }
+    const [roleRows] = await db.query('SELECT role_id FROM roles WHERE role_name = ?', [desiredRole]);
+    if (!roleRows[0]) return fail(res, `Role '${desiredRole}' not found`, null, 400);
+    const role_id = roleRows[0].role_id;
 
-    const existing = await User.findByEmail(email);
-    if (existing) return res.status(400).json({message: 'Email already registered'});
+    const hashed = await bcrypt.hash(password, 12);
+    const [result] = await db.query(
+      'INSERT INTO users (username, email, password, role_id) VALUES (?, ?, ?, ?)',
+      [username, email, hashed, role_id]
+    );
 
-    const salt = await bcrypt.genSalt(10);
-    const hashed = await bcrypt.hash(password, salt);
-    const user = await User.create({username, email, password: hashed, role_id});
-
-    // If the user is a doctor, create a doctor record linked to this user (basic profile - can be updated later)
-    if (desiredRole === 'Doctor'){
-      try{
+    if (desiredRole === 'Doctor') {
+      try {
         const [deptRows] = await db.query('SELECT department_id FROM departments LIMIT 1');
         const department_id = deptRows[0] ? deptRows[0].department_id : null;
-        await db.query('INSERT INTO doctors (full_name, specialization, email, phone, department_id, user_id) VALUES (?, ?, ?, ?, ?, ?)', [username, '', email, '', department_id, user.user_id]);
-      }catch(e){ console.warn('Could not create doctor profile:', e.message); }
+        await db.query(
+          'INSERT INTO doctors (full_name, specialization, email, phone, department_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+          [username, '', email, '', department_id, result.insertId]
+        );
+      } catch (e) { console.warn('Could not create doctor profile:', e.message); }
     }
 
-    res.json({message: 'User registered', user});
+    return success(res, { user_id: result.insertId, username, email, role_name: desiredRole }, 'User registered successfully', 201);
   } catch (err) {
     console.error(err);
-    res.status(500).json({message: 'Server error'});
+    return fail(res, 'Server error', null, 500);
   }
 };
 
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({message: 'Missing fields'});
-    const user = await User.findByEmail(email);
-    if (!user) return res.status(400).json({message: 'Invalid credentials'});
+    if (!email || !password) return fail(res, 'Email and password are required', null, 422);
+
+    const [userRows] = await db.query(
+      'SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON u.role_id = r.role_id WHERE u.email = ?',
+      [email]
+    );
+    const user = userRows[0];
+    if (!user) return fail(res, 'Invalid credentials', null, 401);
+    if (user.is_active === 0) return fail(res, 'Account is deactivated', null, 403);
+
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({message: 'Invalid credentials'});
+    if (!isMatch) return fail(res, 'Invalid credentials', null, 401);
 
-    // get role name
-    const [roleRows] = await db.query('SELECT role_name FROM roles WHERE role_id = ?', [user.role_id]);
-    const role_name = roleRows[0] ? roleRows[0].role_name : 'User';
+    const payload = { user_id: user.user_id, username: user.username, email: user.email, role_id: user.role_id, role_name: user.role_name };
 
-    const payload = { user_id: user.user_id, email: user.email, role_id: user.role_id, role_name };
-    // if doctor, fetch doctor_id
-    if (role_name === 'Doctor'){
+    if (user.role_name === 'Doctor') {
       const [docRows] = await db.query('SELECT doctor_id FROM doctors WHERE user_id = ? LIMIT 1', [user.user_id]);
-      if (docRows && docRows[0]) payload.doctor_id = docRows[0].doctor_id;
+      if (docRows[0]) payload.doctor_id = docRows[0].doctor_id;
     }
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1d' });
-    res.json({message: 'Logged in', token, user: payload});
+    const { token, refreshToken } = generateTokens(payload);
+    await db.query('UPDATE users SET refresh_token = ?, last_login = NOW() WHERE user_id = ?', [refreshToken, user.user_id]);
+
+    res.cookie('sc_refresh', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    return success(res, { token, user: payload }, 'Login successful');
   } catch (err) {
     console.error(err);
-    res.status(500).json({message: 'Server error'});
+    return fail(res, 'Server error', null, 500);
   }
 };
 
-// seed roles endpoint - for development only
-const seedRoles = async (req, res) => {
+const refresh = async (req, res) => {
   try {
-    const roles = ['Admin','Doctor','Receptionist','Pharmacist','Laboratory Technician'];
-    for (const r of roles){
-      await db.query('INSERT IGNORE INTO roles (role_name) VALUES (?)', [r]);
-    }
-    res.json({message: 'Roles seeded'});
-  } catch (err){
-    console.error(err);
-    res.status(500).json({message: 'Server error'});
-  }
-}
+    const refreshToken = req.cookies?.sc_refresh || req.body?.refreshToken;
+    if (!refreshToken) return fail(res, 'Refresh token required', null, 401);
 
-module.exports = { register, login, seedRoles };
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET + '_refresh');
+    } catch {
+      return fail(res, 'Invalid or expired refresh token', null, 401);
+    }
+
+    const [userRows] = await db.query(
+      'SELECT u.*, r.role_name FROM users u LEFT JOIN roles r ON u.role_id = r.role_id WHERE u.user_id = ? AND u.refresh_token = ?',
+      [decoded.user_id, refreshToken]
+    );
+    if (!userRows[0]) return fail(res, 'Refresh token revoked', null, 401);
+
+    const user = userRows[0];
+    const payload = { user_id: user.user_id, username: user.username, email: user.email, role_id: user.role_id, role_name: user.role_name };
+    if (user.role_name === 'Doctor') {
+      const [docRows] = await db.query('SELECT doctor_id FROM doctors WHERE user_id = ? LIMIT 1', [user.user_id]);
+      if (docRows[0]) payload.doctor_id = docRows[0].doctor_id;
+    }
+
+    const { token, refreshToken: newRefresh } = generateTokens(payload);
+    await db.query('UPDATE users SET refresh_token = ? WHERE user_id = ?', [newRefresh, user.user_id]);
+    res.cookie('sc_refresh', newRefresh, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    return success(res, { token, user: payload }, 'Token refreshed');
+  } catch (err) {
+    console.error(err);
+    return fail(res, 'Server error', null, 500);
+  }
+};
+
+const logout = async (req, res) => {
+  try {
+    if (req.user) {
+      await db.query('UPDATE users SET refresh_token = NULL WHERE user_id = ?', [req.user.user_id]);
+    }
+    res.clearCookie('sc_refresh');
+    return success(res, null, 'Logged out successfully');
+  } catch (err) {
+    console.error(err);
+    return fail(res, 'Server error', null, 500);
+  }
+};
+
+const getProfile = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT u.user_id, u.username, u.email, u.created_at, u.last_login, r.role_name FROM users u LEFT JOIN roles r ON u.role_id = r.role_id WHERE u.user_id = ?',
+      [req.user.user_id]
+    );
+    if (!rows[0]) return fail(res, 'User not found', null, 404);
+    return success(res, rows[0], 'Profile fetched');
+  } catch (err) {
+    console.error(err);
+    return fail(res, 'Server error', null, 500);
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
+    const { username, current_password, new_password } = req.body;
+    const updates = [];
+    const values = [];
+
+    if (username) { updates.push('username = ?'); values.push(username); }
+
+    if (new_password) {
+      if (!current_password) return fail(res, 'current_password is required to change password', null, 422);
+      if (new_password.length < 6) return fail(res, 'New password must be at least 6 characters', null, 422);
+      const [rows] = await db.query('SELECT password FROM users WHERE user_id = ?', [req.user.user_id]);
+      const match = await bcrypt.compare(current_password, rows[0].password);
+      if (!match) return fail(res, 'Current password is incorrect', null, 400);
+      updates.push('password = ?');
+      values.push(await bcrypt.hash(new_password, 12));
+    }
+
+    if (!updates.length) return fail(res, 'No valid fields to update', null, 422);
+    values.push(req.user.user_id);
+    await db.query(`UPDATE users SET ${updates.join(', ')} WHERE user_id = ?`, values);
+    return success(res, null, 'Profile updated');
+  } catch (err) {
+    console.error(err);
+    return fail(res, 'Server error', null, 500);
+  }
+};
+
+module.exports = { register, login, refresh, logout, getProfile, updateProfile };
